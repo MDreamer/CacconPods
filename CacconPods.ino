@@ -1,21 +1,13 @@
-/*  OctoWS2811 BasicTest.ino - Basic RGB LED Test
-    http://www.pjrc.com/teensy/td_libs_OctoWS2811.html
-  Required Connections
-  --------------------
-    pin 2:  LED Strip #1    OctoWS2811 drives 8 LED Strips.
-    pin 14: LED strip #2    All 8 are the same length.
-    pin 7:  LED strip #3
-    pin 8:  LED strip #4    A 100 ohm resistor should used
-    pin 6:  LED strip #5    between each Teensy pin and the
-    pin 20: LED strip #6    wire to the LED strip, to minimize
-    pin 21: LED strip #7    high frequency ringining & noise.
-    pin 5:  LED strip #8
-    pin 15 & 16 - Connect together, but do not use
-    pin 4 - Do not use
-    pin 3 - Do not use as PWM.  Normal use is ok.
-  This test is useful for checking if your LED strips work, and which
-  color config (WS2811_RGB, WS2811_GRB, etc) they require.
-*/
+/*
+// Based on Adafruit Neopixel example https://github.com/adafruit/Adafruit_NeoPixel 
+
+// Parameter 1 = number of pixels in strip
+// Parameter 2 = pin number (most are valid)
+// Parameter 3 = pixel type flags, add together as needed:
+//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
+//   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
+//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
+//   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 
 /*
 State machine:
@@ -23,7 +15,12 @@ Pulsing - random period & duration every 30 sec
 every 15 sec - random Start-End -> crawl there
 */
 
-#include <OctoWS2811.h>
+
+#include <Adafruit_NeoPixel.h>
+
+//just for the beginning, later I'll might divide it to 4 pins so
+//we won't have data wires between the led strips
+#define PIN 23
 
 #define RED    0xFF0000
 #define BLCK   0x000000
@@ -39,93 +36,126 @@ every 15 sec - random Start-End -> crawl there
 // 30 LED per meter, each strip is 1.5 meters, 4 strips in total = 6 meters = 180 LEDs
 const int ledsPerStrip = 180;
 
-DMAMEM int displayMemory[ledsPerStrip*6];
-int drawingMemory[ledsPerStrip*6];
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(ledsPerStrip, PIN, NEO_GRB + NEO_KHZ800);
 
-const int config = WS2811_GRB | WS2811_800kHz;
-
-OctoWS2811 leds(ledsPerStrip, displayMemory, drawingMemory, config);
+//catterpilar dimensions
+int min_cat = 10;
+int max_cat = 80;
 
 int max_led;
 int min_led;
 
 int dest_max_led;
-int desl_min_led;
+int dest_min_led;
 
 int periodePulse = random(3000,6000);
 int displacePulse = random(1000,3000);     
 long time=0;
 
-int color_value;
+uint32_t color_value;
 
-long crawlTimeDelaysec = 15000; // 15 sec
-long crawlCountTime = 0;
+unsigned long crawlTimeDelaysec = 10000; // 10 sec
+unsigned long crawlCountTime = 0;
 
-long steplTimeDelaysec = 500; //0.5 sec
-long steplCountTime = 0;
+unsigned long stepTimeDelaysec = 25; //0.025 sec
+unsigned long stepCountTime = 0;
 
-bool crawlMode;
+unsigned long pulseTimeDelaysec = 10; //0.01 sec
+unsigned long pulseCountTime = 0;
 
-void setup() {
-  leds.begin();
-  leds.show();
-  //starting the program - kill all the lights - make them dark
-  colorWipe(BLCK, microsec);
-}
-
-void loop() {
-  //2000ms between each cycle loop
-  // change them all in 2 seconds
-  int microsec = 2000000 / leds.numPixels();  
-
-  //no delay mechanism for counting
-
-  if (abs(millis() - crawlCountTime) > crawlTimeDelaysec) {
-  {
-    //create random led cound to light up, must be bigger than 10
-    //in order to create a feeling that there is something living inside the pods
-    while (max_led - min_led < 10)
-    {
-      max_led = random(0,ledsPerStrip-1);
-      min_led = random(0,max_led);
-    }  
-    crawlCountTime = millis();
-    crawlMode = true;
-  }    
-
-  
-  //if the Start-End chaned start to crwal.. go to crawl mode.
-  if (crawlMode)
-    if (abs(millis() - steplCountTime) > steplTimeDelaysec) {
-      if (max_led < dest_max_led) 
-        max_led++;
-       if (min_led > dest_min_led)
-        min_led--;
-      steplCountTime = millis();
-    }
-
-
-  time = millis();
-  //smart cos fade of the leds
-  color_value = 128+127*cos(2*PI/periodePulse*(displacePulse-time));
-
-  //RED    0xFF0000 = 16711680d (255*256*256)
-
-  colorWipe(1,30,(color_value*256*256),0);
-
-}
+bool crawlMode = false;
 
 void colorWipe(int startLED, int endLED, int color, int wait)
 {
   //kill all the leds
   for (int i=0; i < ledsPerStrip; i++)
-    leds.setPixel(i, BLCK);
+    strip.setPixelColor(i, BLCK);
   //light just one one we need - useful when crawling
-  for (int i=startLED; i =< endLED; i++)
-    leds.setPixel(i, color);
-  leds.show();
+  for (int i=startLED; i <= endLED; i++)
+    strip.setPixelColor(i, color,0,0);
+  strip.show();
   // I don't how smart the Arduino complier is...
   if (wait > 0)
     delayMicroseconds(wait); 
 }
+
+
+void setup() 
+{
+  
+  //starting the program - kill all the lights - make them dark
+  colorWipe(0,ledsPerStrip, BLCK, 0);
+
+  for (int i=0; i < ledsPerStrip; i++)
+    strip.setPixelColor(i, 0,0,0);
+    
+  strip.begin();
+  strip.show(); // Initialize all pixels to 'off'
+  
+  crawlMode = true;
+  max_led = 50;
+  min_led = 20;
+}
+
+void loop() 
+{
+  
+  //2000ms between each cycle loop
+  // change them all in 2 seconds
+  int microsec = 2000000 / ledsPerStrip;
+
+  //no delay mechanism for counting
+
+  if ((abs(millis() - crawlCountTime) > crawlTimeDelaysec) and crawlMode == false)
+  {
+    //create random led cound to light up, must be bigger than 10
+    //in order to create a feeling that there is something living inside the pods
+    while (((dest_max_led - dest_min_led) < min_cat) or ((dest_max_led - dest_min_led) > max_cat))
+    {
+      dest_max_led = random(0,ledsPerStrip-1);
+      dest_min_led = random(0,dest_max_led);
+      crawlMode = true;
+      
+    }  
+    crawlCountTime = millis();
+    
+  }    
+
+  
+  //if the Start-End chaned start to crwal.. go to crawl mode.
+  if (crawlMode)
+    if (abs(millis() - stepCountTime) > stepTimeDelaysec) {
+      if (max_led < dest_max_led) 
+        max_led++;
+      if (max_led > dest_max_led) 
+        max_led--;
+      if (min_led < dest_min_led)
+        min_led++;
+      if (min_led > dest_min_led) 
+        min_led--;
+
+      //to restart the crawler -random mode
+      if (max_led == dest_max_led and min_led == dest_min_led) 
+      {
+        crawlMode = false;
+        dest_max_led = 0;
+        dest_min_led = 0;
+      }
+      stepCountTime = millis();
+    }
+
+  
+  //smart cos fade of the leds
+  time=millis();
+  color_value = 128+127*cos(2*PI/periodePulse*(displacePulse-time));
+  
+  //RED    0xFF0000 = 16711680d (255*256*256)
+  colorWipe(min_led,max_led,255,0);    
+  strip.setBrightness(color_value);
+  strip.show();
+
+  
+
+}
+
 
